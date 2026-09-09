@@ -279,10 +279,10 @@ with overview:
         with left:
             st.markdown("**주요 사업 · 공시에서 확인한 특징**")
             excerpt=report.get("business_excerpt","")
-            sentences=[x.strip() for x in re.split(r"(?<=[.!?])\s+",excerpt) if 35<len(x.strip())<650 and any(w in x for w in ['사업','제조','생산','판매','서비스'])]
+            sentences=[x.strip() for x in re.split(r"(?<=[.!?])\s+",excerpt) if 35<len(x.strip())<650 and any(w in x for w in ['사업','제조','생산','판매','서비스']) and re.search(r"다[.!?]$",x.strip()) and '---' not in x]
             if sentences:
                 for sentence in sentences[:3]:st.write("• "+sentence)
-            elif excerpt:st.write(excerpt[:850])
+            elif excerpt:st.info("사업 원문은 수집됐지만 요약할 설명 문장을 찾지 못했습니다. 기업·섹터 탭에서 원문을 확인하세요.")
             else:st.info("사업 원문이 아직 수집되지 않았습니다. 자료가 들어오면 기업 특징을 표시합니다.")
             st.caption("사업보고서 발췌 · "+str(report["years"][-1]["year"])+"년 결산 기준")
         with right:
