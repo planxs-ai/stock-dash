@@ -1,5 +1,7 @@
 import hmac
 import hashlib
+import requests
+from urllib.parse import unquote
 import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -169,6 +171,48 @@ if latest:
     choices[latest["code"]] = latest
 with st.sidebar:
     st.header("내 분석 기록")
+    st.caption("앱 버전 · 연결 진단 01")
+    if not sample_mode:
+        with st.expander("API 연결 상태 확인"):
+            st.caption("현재 앱 서버에서 확인합니다. 키·개인 자료는 결과에 표시하지 않습니다.")
+            if st.button("연결 진단 실행"):
+                checks = []
+                dart_key = os.getenv("DART_CRTFC_KEY", "").strip()
+                price_key = unquote(os.getenv("DATA_GO_KR_SERVICE_KEY", "").strip())
+                targets = [
+                    ("DART 소형 JSON", "https://opendart.fss.or.kr/api/company.json",
+                     {"crtfc_key":dart_key,"corp_code":"00126380"}, bool(dart_key)),
+                    ("주식시세 JSON", "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo",
+                     {"serviceKey":price_key,"resultType":"json","numOfRows":1}, bool(price_key)),
+                ]
+                for name, url, params, configured in targets:
+                    if not configured:
+                        checks.append({"항목":name,"결과":"키 설정 없음"})
+                        continue
+                    try:
+                        response = requests.get(url,params=params,timeout=(5,12))
+                        if response.status_code != 200:
+                            result = "HTTP "+str(response.status_code)
+                        else:
+                            payload=response.json()
+                            code=str(payload.get("status", "")) if name.startswith("DART") else str(payload.get("response",{}).get("header",{}).get("resultCode",""))
+                            known={"000":"연결·인증 정상", "00":"연결·인증 정상", "0":"연결·인증 정상",
+                                   "010":"DART 키 미등록", "011":"DART 키 중지", "012":"DART IP 제한",
+                                   "020":"DART 한도 초과", "013":"연결됨 · 자료 없음", "800":"DART 점검 중"}
+                            result=known.get(code,"서버 응답 수신 · 인증 또는 응답 형식 확인 필요")
+                        checks.append({"항목":name,"결과":result})
+                    except requests.Timeout:
+                        checks.append({"항목":name,"결과":"시간 초과 · 인증 판정 불가"})
+                    except requests.exceptions.SSLError:
+                        checks.append({"항목":name,"결과":"TLS 보안 연결 실패"})
+                    except requests.ConnectionError:
+                        checks.append({"항목":name,"결과":"연결 실패 · 네트워크/DNS 확인"})
+                    except (requests.RequestException,ValueError):
+                        checks.append({"항목":name,"결과":"정상 JSON을 받지 못함"})
+                st.session_state.connection_checks=checks
+            if st.session_state.get("connection_checks"):
+                st.dataframe(st.session_state.connection_checks,hide_index=True)
+                st.caption("DART JSON도 시간 초과면 기업목록 크기만의 문제로 볼 수 없습니다. JSON이 정상이고 기업목록만 실패하면 다운로드 경로를 점검해야 합니다.")
     if not sample_mode:
         with st.form("save_watch_only"):
             watch_name = st.text_input("관심종목 이름", placeholder="분석 연결이 안 돼도 저장할 수 있습니다")
