@@ -107,14 +107,30 @@ def run_analysis(code):
                     st.info("이름을 정확히 확인하려면 검색 목록에서 종목을 선택하세요.")
                     return
                 code = matches[0]["code"]
-            report = provider.automatic(code)
+            price, price_day, price_name = provider.price(code, date.today())
+            try:
+                report = provider.automatic(code)
+            except DataError as error:
+                existing = next((s for s in state["stocks"] if s["code"] == code), {})
+                partial = {**existing,"code":code,"name":price_name,"kind":existing.get("kind","관심"),
+                           "price_snapshot":{"price":price,"date":price_day},"analysis_error":str(error)}
+                st.session_state.latest_analysis = partial
+                try:
+                    store.save_stock(partial)
+                    st.session_state.save_notice = "시세·관심종목은 저장했습니다. 재무 분석은 완료되지 않았습니다."
+                except Exception:
+                    st.session_state.save_notice = "시세만 조회했습니다. 저장소에도 기록하지 못했습니다."
+                st.session_state.selected_code=code
+                st.session_state.pop("stock_picker",None)
+                st.session_state.pop("search_candidates",None)
+                st.rerun()
             result = brief(report)
             ai = explain(report, result)
             at = datetime.now(ZoneInfo("Asia/Seoul")).isoformat()
             existing = next((s for s in state["stocks"] if s["code"] == code), {})
             stock = {**existing, "code": code, "name": report["name"], "kind": existing.get("kind", "관심"),
                      "year": report["years"][-1]["year"], "report": report,
-                     "automatic_brief": result, "ai_brief": ai, "analyzed_at": at}
+                     "automatic_brief": result, "ai_brief": ai, "analyzed_at": at,"analysis_error":None}
             # Display completed analysis even when a subsequent DB write fails.
             st.session_state.latest_analysis = stock
             try:
@@ -254,8 +270,16 @@ if not is_demo:
 
 overview, business, journal = st.tabs(["한눈에 분석", "기업·섹터", "분석 기록·투자일지"])
 with overview:
+    if stock.get("analysis_error"):
+        st.warning(stock["analysis_error"])
+        snapshot=stock.get("price_snapshot")
+        if snapshot:
+            st.metric("조회된 기준 종가",f"{snapshot['price']:,.0f}원")
+            st.caption("시세 기준일: "+snapshot["date"])
+        if report:
+            st.info("아래 재무 분석은 이전에 저장한 결과입니다. 이번 조회로 갱신되지 않았습니다.")
     if not report:
-        st.info("위의 최신 데이터로 다시 분석을 누르면 저장된 종목을 자동으로 분석합니다.")
+        st.info("관심종목과 투자일지는 사용할 수 있습니다. DART 연결 전에는 성장·적정주가·재무 분석값을 만들지 않습니다.")
     else:
         result = brief(report)
         fair = result["fair"]
