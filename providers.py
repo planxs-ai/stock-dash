@@ -235,7 +235,9 @@ class Official:
             text = html.unescape(re.sub(r"<[^>]+>", " ", text))
             text = re.sub(r"\s+", " ", text)
             # A bounded source excerpt, not a generated business claim.
-            match = re.search(r"(?:II\.?\s*사업의 내용|1\.?\s*사업의 개요|주요 제품 및 서비스)", text)
+            headings = list(re.finditer(r"II\.?\s*사업의 내용", text))
+            # Reports may repeat the heading in a table of contents.
+            match = headings[-1] if headings else re.search(r"(?:1\.?\s*사업의 개요|주요 제품 및 서비스)", text)
             return text[match.start():match.start()+14000] if match else ""
         except (zipfile.BadZipFile, KeyError):
             return ""
