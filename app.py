@@ -37,19 +37,54 @@ if password and not st.session_state.get("authorized"):
                 st.error("비밀번호를 확인하세요.")
     st.stop()
 
+class SessionStore:
+    """Explicit opt-in practice storage, isolated to this browser session."""
+    cloud = False
+
+    def read(self):
+        return st.session_state.setdefault("practice_data", {"stocks": [], "journal": [], "runs": []})
+
+    def save_stock(self, stock):
+        data = self.read()
+        for index, old in enumerate(data["stocks"]):
+            if old["code"] == stock["code"]:
+                data["stocks"][index] = {**old, **stock}
+                return
+        data["stocks"].append(stock)
+
+    def log(self, collection, item):
+        self.read()[collection].append(item)
+
+
+sample_mode = not password
 try:
-    store = Store()
-    # Without an access gate, show only nonpersonal synthetic data.
-    sample_mode = not password
+    if sample_mode or st.session_state.get("practice_mode"):
+        store = SessionStore()
+    else:
+        store = Store()
     state = {"stocks": [], "journal": [], "runs": []} if sample_mode else store.read()
 except Exception:
-    st.error("저장 공간 연결에 실패했습니다. 설정을 확인한 뒤 다시 열어 주세요.")
+    st.error("비밀번호 확인은 통과했지만, 종목 저장 공간을 열지 못했습니다.")
+    url_set = bool(os.getenv("SUPABASE_URL", "").strip())
+    key_set = bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip())
+    if url_set != key_set:
+        st.info("Supabase 주소와 키 중 하나만 설정되어 있습니다. DB를 사용하지 않으려면 Secrets에서 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY 두 항목을 모두 지우고 앱을 재시작하세요.")
+    elif url_set:
+        st.info("Supabase 설정이 감지됐습니다. 프로젝트 주소·서버 키·schema.sql 실행 여부를 확인하세요. DB를 사용하지 않으려면 두 Supabase 항목을 모두 지우고 앱을 재시작하세요.")
+    else:
+        st.info("앱이 실행되는 서버의 저장 파일을 열지 못했습니다. 기존 데이터는 덮어쓰지 않았습니다. 아래 버튼으로 별도의 임시 실습을 시작할 수 있습니다.")
+    st.caption("임시 실습은 현재 접속에서만 유지됩니다. 새로고침·로그아웃 시 사라질 수 있으며 기존 저장 자료와 합쳐지지 않습니다.")
+    if st.button("저장 연결 없이 임시 실습 시작", type="primary"):
+        st.session_state.practice_mode = True
+        st.rerun()
     st.stop()
 
 if sample_mode:
     st.info("가상 데이터로 둘러보기 · APP_PASSWORD 설정 후 개인 종목 저장과 실데이터 조회가 열립니다.")
+elif st.session_state.get("practice_mode"):
+    st.warning("임시 실습 · 현재 접속에서만 저장됩니다. 중요한 판단은 개인 문서에 복사해 두세요.")
 else:
-    st.caption("클라우드 저장 · 다른 기기에서도 이어 사용" if store.cloud else "이 PC에 저장 · 다른 기기 동기화는 Supabase 연결이 필요합니다.")
+    st.caption("클라우드 저장 · 다른 기기에서도 이어 사용" if store.cloud else "실행 서버에 저장 · 웹 호스팅 재시작 시 사라질 수 있습니다.")
 
 with st.sidebar:
     st.header("내 종목 보관함")
