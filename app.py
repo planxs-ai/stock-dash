@@ -1,5 +1,6 @@
 import hmac
 import hashlib
+import re
 import requests
 from urllib.parse import unquote
 import os
@@ -270,6 +271,41 @@ if not is_demo:
 
 overview, business, journal = st.tabs(["한눈에 분석", "기업·섹터", "분석 기록·투자일지"])
 with overview:
+    st.subheader("이 종목을 먼저 이해하기")
+    if report:
+        company=report.get("company",{})
+        sectors=brief(report)["sectors"]
+        left,right=st.columns([2,1])
+        with left:
+            st.markdown("**주요 사업 · 공시에서 확인한 특징**")
+            excerpt=report.get("business_excerpt","")
+            sentences=[x.strip() for x in re.split(r"(?<=[.!?])\s+",excerpt) if 35<len(x.strip())<650 and any(w in x for w in ['사업','제조','생산','판매','서비스'])]
+            if sentences:
+                for sentence in sentences[:3]:st.write("• "+sentence)
+            elif excerpt:st.write(excerpt[:850])
+            else:st.info("사업 원문이 아직 수집되지 않았습니다. 자료가 들어오면 기업 특징을 표시합니다.")
+            st.caption("사업보고서 발췌 · "+str(report["years"][-1]["year"])+"년 결산 기준")
+        with right:
+            st.markdown("**사업 관련 키워드**")
+            st.write(" · ".join(x["sector"] for x in sectors) if sectors else "키워드 분류 대기")
+            st.caption("원문에 등장한 키워드이며 주력 섹터 확정은 아닙니다.")
+            st.write("업종코드: "+str(company.get("induty_code","미수집")))
+        st.subheader("최근 공시 · 무엇이 달라졌나요?")
+        st.caption("공시 목록 수집일: "+report.get("fetched","")+" · 최근 90일 중 조회된 공시입니다. 실시간 뉴스 전체를 뜻하지 않습니다.")
+        notices=sorted(report.get("disclosures",[]),key=lambda x:x.get("date",""),reverse=True)
+        if notices:
+            for item in notices[:6]:
+                st.link_button(item["date"]+" · "+item["title"],item["url"])
+        else:st.info("수집본에 최근 공시가 없습니다. 공시가 없다는 확정 판단은 아닙니다.")
+        st.markdown("**다음에 확인할 질문**")
+        if sectors:
+            st.write(" · ".join(sectors[0]["signals"])+"의 변화가 매출과 영업이익에 반영됐나요?")
+        else:st.write("매출 증가가 영업이익 증가로 이어졌나요? 최근 공시가 기존 투자 이유를 바꾸나요?")
+        ai=stock.get("ai_brief")
+        if ai and ai.get("status")=="ok":
+            with st.expander("AI 핵심 해설 보기"):st.markdown(ai["text"])
+    else:
+        st.info("현재 이 종목의 기업·재무 공시 자료가 없습니다. 관심종목 저장과 일지는 사용할 수 있으며, 미수집 정보를 임의로 채우지 않습니다.")
     if stock.get("analysis_error"):
         st.warning(stock["analysis_error"])
         snapshot=stock.get("price_snapshot")
