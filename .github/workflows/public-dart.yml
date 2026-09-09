@@ -1,4 +1,5 @@
 name: Public DART data
+# Public teaching examples; business extraction skips the table of contents.
 on:
   workflow_dispatch:
     inputs:
