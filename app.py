@@ -7,22 +7,24 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from analysis import AXES, EDGE, score
-from providers import Official, demo
+import json
+from automatic import brief
+from ai_brief import explain
+from providers import Official, demo, DataError
 from storage import Store
 
 load_dotenv()
 st.set_page_config(page_title="PlanX · 내 관심종목", page_icon="📊", layout="wide")
 # Streamlit root-level secrets become env vars, but explicit loading is clearer.
 try:
-    for key in ["APP_PASSWORD", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "DATA_GO_KR_SERVICE_KEY", "DART_CRTFC_KEY"]:
+    for key in ["APP_PASSWORD", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "DATA_GO_KR_SERVICE_KEY", "DART_CRTFC_KEY", "OPENAI_API_KEY", "OPENAI_MODEL"]:
         if key in st.secrets:
             os.environ[key] = str(st.secrets[key])
 except FileNotFoundError:
     pass
 
 st.title("내 관심종목 퀀트 보드")
-st.caption("내 종목의 사업과 실적을 확인하고, 판단 기준을 기록합니다.")
+st.caption("종목명을 입력하면 공식 실적·가치·사업 분석을 가져오고 기록합니다.")
 st.markdown("<style>.stMetric{border:1px solid #e7d9c4;padding:16px;border-radius:14px}h1,h2,h3{letter-spacing:-.03em}</style>", unsafe_allow_html=True)
 
 password = os.getenv("APP_PASSWORD", "")
@@ -86,171 +88,194 @@ elif st.session_state.get("practice_mode"):
 else:
     st.caption("클라우드 저장 · 다른 기기에서도 이어 사용" if store.cloud else "실행 서버에 저장 · 웹 호스팅 재시작 시 사라질 수 있습니다.")
 
+
+def run_analysis(code):
+    try:
+        with st.spinner("공식 시세 · 최근 결산 · 과거 평가 · 사업 공시를 확인합니다…"):
+            provider = st.session_state.get("directory_provider") or Official()
+            report = provider.automatic(code)
+            result = brief(report)
+            ai = explain(report, result)
+            at = datetime.now(ZoneInfo("Asia/Seoul")).isoformat()
+            existing = next((s for s in state["stocks"] if s["code"] == code), {})
+            stock = {**existing, "code": code, "name": report["name"], "kind": existing.get("kind", "관심"),
+                     "year": report["years"][-1]["year"], "report": report,
+                     "automatic_brief": result, "ai_brief": ai, "analyzed_at": at}
+            # Display completed analysis even when a subsequent DB write fails.
+            st.session_state.latest_analysis = stock
+            try:
+                store.save_stock(stock)
+                store.log("journal", {"code": code, "at": at, "kind": "automatic",
+                                      "report": report, "automatic_brief": result, "ai_brief": ai})
+                st.session_state.save_notice = "분석 결과와 이력을 저장했습니다."
+            except Exception:
+                st.session_state.save_notice = "분석은 끝났지만 저장하지 못했습니다. 아래 JSON 다운로드로 결과를 보관하세요."
+            st.session_state.selected_code = code
+            st.session_state.pop("stock_picker", None)
+            st.session_state.pop("search_candidates", None)
+        st.rerun()
+    except DataError as error:
+        st.error(str(error))
+    except Exception:
+        st.error("분석을 마치지 못했습니다. 이전 결과는 유지됩니다. 잠시 후 다시 시도하세요.")
+
+
+if not sample_mode:
+    with st.form("search"):
+        query = st.text_input("종목명 또는 키워드", placeholder="삼성전자 · 삼성 · 하이닉스 · 005930")
+        submitted = st.form_submit_button("검색·자동 분석", type="primary")
+    if submitted:
+        try:
+            provider = st.session_state.get("directory_provider") or Official()
+            st.session_state.directory_provider = provider
+            matches = provider.search(query)
+            st.session_state.search_candidates = matches
+            if len(matches) == 1:
+                run_analysis(matches[0]["code"])
+            elif not matches:
+                st.info("일치하는 상장 기업명이 없습니다. 이름 일부나 6자리 종목코드로 다시 검색하세요.")
+        except DataError as error:
+            st.error(str(error))
+    matches = st.session_state.get("search_candidates", [])
+    if len(matches) > 1:
+        st.caption("이름에 검색어가 포함된 기업입니다. 종목을 선택하면 코드는 자동으로 입력됩니다.")
+        with st.form("candidate"):
+            candidate = st.selectbox("검색된 종목", matches, format_func=lambda x: x["name"]+" · "+x["code"])
+            if st.form_submit_button("이 종목 분석", type="primary"):
+                run_analysis(candidate["code"])
+
+choices = {s["code"]: s for s in state["stocks"]}
+latest = st.session_state.get("latest_analysis")
+if latest:
+    choices[latest["code"]] = latest
 with st.sidebar:
-    st.header("내 종목 보관함")
-    if not sample_mode:
-        with st.form("add"):
-            name = st.text_input("종목명")
-            code = st.text_input("종목코드 6자리", max_chars=6)
-            kind = st.selectbox("구분", ["관심", "보유"])
-            reason = st.text_area("관심을 가진 이유")
-            if st.form_submit_button("종목 저장"):
-                if name.strip() and len(code) == 6 and code.isascii() and code.isdigit():
-                    try:
-                        store.save_stock({"name": name.strip(), "code": code, "kind": kind, "reason": reason,
-                                          "year": date.today().year - 1})
-                        st.rerun()
-                    except Exception:
-                        st.error("저장 실패. 입력 내용을 보관한 뒤 다시 시도하세요.")
-                else:
-                    st.error("종목명과 숫자 6자리 코드를 확인하세요.")
-    choices = {s["code"]: s for s in state["stocks"]}
+    st.header("내 분석 기록")
     if choices:
-        selected = st.selectbox("저장된 종목", list(choices), format_func=lambda c: f"{choices[c]['kind']} · {choices[c]['name']}")
+        codes = list(choices)
+        preferred = st.session_state.get("selected_code")
+        selected = st.selectbox("종목 선택", codes, index=codes.index(preferred) if preferred in codes else 0,
+                                format_func=lambda c: choices[c]["name"]+" · "+c, key="stock_picker")
         stock = choices[selected]
     else:
-        stock = {"code": "SAMPLE", "name": "가상 반도체", "year": 2025}
+        stock = {"code": "SAMPLE", "name": "가상 반도체", "report": demo()}
     if password and st.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
 
+report = stock.get("report")
 is_demo = stock["code"] == "SAMPLE"
-report = demo() if is_demo else stock.get("report")
-st.subheader(stock["name"])
-overview, journal, automation = st.tabs(["분석·비교", "투자일지", "자동 점검"])
+st.subheader(stock["name"] + (" · 가상 예시" if is_demo else " · "+stock["code"]))
+if not is_demo:
+    if st.button("최신 데이터로 다시 분석"):
+        run_analysis(stock["code"])
+    if st.session_state.get("save_notice"):
+        st.caption(st.session_state.save_notice)
 
+overview, business, journal = st.tabs(["한눈에 분석", "기업·섹터", "분석 기록·투자일지"])
 with overview:
-    if not is_demo:
-        with st.form("query"):
-            year = st.number_input("비교 기준 사업연도 · 결산 3개년", 2015, date.today().year - 1, stock.get("year", date.today().year - 1))
-            peers_text = st.text_input("같은 업종 경쟁사 코드 · 최대 3개, 쉼표 구분", ",".join(stock.get("peers", [])))
-            if st.form_submit_button("공식 데이터 분석"):
-                peers = list(dict.fromkeys(c.strip() for c in peers_text.split(",") if c.strip()))
-                if len(peers) > 3 or any(len(c) != 6 or not c.isascii() or not c.isdigit() or c == stock["code"] for c in peers):
-                    st.error("본인을 제외한 종목코드 6자리, 최대 3개를 입력하세요.")
-                else:
-                    try:
-                        with st.spinner("시세와 공시를 확인합니다…"):
-                            provider = Official()
-                            r = provider.report(stock["code"], year)
-                            peer_reports = [provider.report(c, year) for c in peers]
-                            result = score(r, stock.get("assumptions"), stock.get("evidence"), peer_reports)
-                            store.save_stock({"code": stock["code"], "year": year, "peers": peers,
-                                              "report": r, "peer_reports": peer_reports, "result": result})
-                            store.log("journal", {"code": stock["code"], "at": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
-                                                  "kind": "analysis", "report": r, "result": result})
-                        st.rerun()
-                    except Exception:
-                        st.error("분석을 완료하지 못했습니다. 키·기준연도·경쟁사 보고서를 확인하세요. 이전 결과는 유지됩니다.")
-    if report:
-        st.caption(f"시세 기준일 {report['price_date']} · 재무 {report['basis']} · 단위 억원 · 조회일 {report['fetched']}")
-        if report.get("sample"):
-            st.warning("이 종목과 숫자는 가상 예시입니다.")
-        last = report["years"][-1]
-        for col, label, value in zip(st.columns(3), ["기준 종가 · 원", "결산 매출 · 억원", "결산 영업이익 · 억원"], [report["price"], last["revenue"], last["profit"]]):
-            col.metric(label, f"{value:,.0f}" if value is not None else "자료 없음")
-        st.subheader("결산 실적 추이")
-        chart = pd.DataFrame(report["years"])[["year", "revenue", "profit"]].rename(columns={"year": "연도", "revenue": "매출", "profit": "영업이익"})
-        chart["연도"] = chart["연도"].astype(str)
-        st.bar_chart(chart.set_index("연도"), color=["#b8872e", "#65866f"])
-        st.caption("연간 결산 실적입니다. 분기 실적이나 올해 전망으로 해석하지 않습니다.")
-        for row in report["years"]:
-            if row["url"]:
-                st.link_button(f"{row['year']} 공시 원문", row["url"])
-        st.subheader("경쟁사 비교")
-        peers = stock.get("peer_reports", [])
-        if peers:
-            rows = []
-            for r in [report, *peers]:
-                metrics = score(r)
-                rows.append({"기업": r["name"], "연결/별도": r["basis"], "결산연도": r["years"][-1]["year"],
-                             "매출성장률 %": metrics["revenue_growth"], "영업이익률 %": metrics["margin"]})
-            st.dataframe(rows, hide_index=True)
-        else:
-            st.info("경쟁사 2개 이상을 지정하면 동일 결산연도·연결/별도 기준으로 경쟁력 점수를 계산합니다.")
-        assumptions = stock.get("assumptions")
-        with st.form("value"):
-            st.subheader("적정주가 · 내가 정하는 가정")
-            defaults = assumptions or {"profit": max(last["profit"] or 1, 1), "multiple": 7., "debt": 0., "shares": 100.}
-            fields = [("profit", "예상 연간 영업이익 · 억원"), ("multiple", "EV/영업이익 배수"), ("debt", "순차입금 · 억원, 순현금은 음수"), ("shares", "희석 반영 주식수 · 백만주")]
-            draft = {key: st.number_input(label, value=float(defaults[key])) for key, label in fields}
-            confirmed = st.checkbox("예상치·배수·순차입금·주식수의 단위와 근거를 확인했습니다.")
-            if st.form_submit_button("가정으로 계산·저장", disabled=is_demo):
-                if confirmed and min(draft["profit"], draft["multiple"], draft["shares"]) > 0:
-                    try:
-                        store.save_stock({"code": stock["code"], "assumptions": draft})
-                        st.rerun()
-                    except Exception:
-                        st.error("가정 저장 실패. 다시 시도하세요.")
-                else:
-                    st.error("이익·배수·주식수는 양수여야 하며 근거 확인이 필요합니다.")
-        results = score(report, assumptions, stock.get("evidence"), peers)
-        if results["valuation"]:
-            v = results["valuation"]
-            for col, key in zip(st.columns(3), ["Bear", "Base", "Bull"]):
-                col.metric(key, f"{v[key]:,.0f}원")
-            st.caption("(예상 영업이익 × EV/영업이익 배수 − 순차입금) ÷ 주식수. 금융업·복수 주식종류 기업에는 별도 모델이 필요합니다.")
-        for col, axis in zip(st.columns(5), AXES):
-            value = results["scores"][axis]
-            col.metric(axis, f"{value}/20" if value is not None else "보류")
-        st.write(f"종합 {results['total']}/100" if results["total"] is not None else "미확인 항목이 있어 종합 점수는 보류합니다.")
+    if not report:
+        st.info("위의 최신 데이터로 다시 분석을 누르면 저장된 종목을 자동으로 분석합니다.")
     else:
-        st.info("저장한 종목의 ‘공식 데이터 분석’을 눌러 주세요. 연결 전에는 숫자를 만들지 않습니다.")
+        result = brief(report)
+        fair = result["fair"]
+        st.caption(f"시세 {report['price_date']} · 결산 {report['years'][-1]['year']} · {report['basis']} · 조회 {report['fetched']}")
+        if report.get("sample"):
+            st.warning("가상 종목·숫자입니다. 실제 분석은 위 검색창에서 시작하세요.")
+        st.write(result["summary"])
+        cols = st.columns(4)
+        cols[0].metric("기준 종가", f"{report['price']:,.0f}원")
+        cols[1].metric("성장", result["growth"])
+        cols[2].metric("가치 판단", result["value"])
+        cols[3].metric("적정주가 참고값", f"{fair['base']:,.0f}원" if fair else "계산 자료 부족")
+        st.subheader("자동 퀀트 진단")
+        for col, (name, value), limit in zip(st.columns(3), result["scores"].items(), [30,30,40]):
+            col.metric(name, f"{value}/{limit}" if value is not None else "보류")
+        st.caption(f"자동 진단 {result['total']}/100 · 규칙 기반 참고 점수" if result["total"] is not None else "계산에 필요한 자료가 없는 항목은 점수를 만들지 않습니다.")
+        st.subheader("실적은 성장하고 있나요?")
+        chart = pd.DataFrame(report["years"])[["year","revenue","profit"]].rename(columns={"year":"연도","revenue":"매출","profit":"영업이익"})
+        chart["연도"] = chart["연도"].astype(str)
+        st.bar_chart(chart.set_index("연도"), color=["#b8872e","#65866f"])
+        st.dataframe(chart, hide_index=True)
+        st.caption("단위 억원 · 확정 결산 3개년. 분기 실적이나 올해 전망을 대신하지 않습니다.")
+        st.subheader("현재 가격은 낮은 편인가요?")
+        if fair:
+            for col, name, key in zip(st.columns(3), ["과거 낮은 배수 적용","과거 중간 배수 적용","과거 높은 배수 적용"], ["low","base","high"]):
+                col.metric(name, f"{fair[key]:,.0f}원")
+            st.write(f"중간 참고값 대비 가격 차이: {fair['gap']:+.1f}%")
+        st.write(result["fair_reason"])
+        with st.expander("계산 근거와 한계 확인"):
+            st.write("이전 두 결산의 공시일 7일 후까지 조회되는 종가와 시가총액을 이용합니다. 각 시가총액 ÷ 해당 결산 영업이익 배수를 최근 결산 영업이익에 곱하고 현재 상장주식수로 나눕니다.")
+            st.write("참고값은 내재가치 확정값·목표주가·미래 이익 예측이 아닙니다. 차입금 변화, 우선주, 비지배지분, 사업구조 변화와 경기 사이클을 충분히 반영하지 못합니다. 과거 저점 이익은 높은 배수를 만들 수 있습니다. 금융업은 계산을 보류합니다.")
+            if report.get("anchors"):
+                st.dataframe(report["anchors"], hide_index=True)
+            st.write("성장 30점: 매출·이익 증가율 규칙. 수익성 30점: 영업이익률 25%에서 만점. 가치 40점: 참고가와 같으면 20점, 가격 차이 ±40%에서 0~40점. 검증된 수익 예측 점수가 아닙니다.")
+        for warning in report.get("warnings", []):
+            st.caption(warning)
+        for row in report["years"]:
+            if row.get("url"):
+                st.link_button(f"{row['year']}년 공시 원문",row["url"])
 
-    if not is_demo:
-        st.subheader("주요 사업과 엣지 근거")
-        st.caption("AI가 임의로 점수를 부여하지 않습니다. 공시 원문을 읽고 근거를 기록하세요.")
-        with st.form("evidence"):
-            business = st.text_area("주요 사업 · 공시에서 확인한 내용", stock.get("business", ""))
-            evidence = {}
-            for axis in EDGE:
-                old = stock.get("evidence", {}).get(axis, {})
-                with st.expander(axis):
-                    reviewed = st.checkbox("이 항목 검토 완료", old.get("reviewed", False), key=axis+"reviewed")
-                    checked = st.checkbox("원문에서 근거 확인", old.get("checked", False), key=axis+"checked")
-                    url = st.text_input("DART 공시 링크", old.get("url", ""), key=axis+"url")
-                    excerpt = st.text_area("근거 문장", old.get("excerpt", ""), key=axis+"text")
-                    evidence[axis] = {"reviewed": reviewed, "checked": checked, "url": url, "excerpt": excerpt, "date": date.today().isoformat()}
-            if st.form_submit_button("사업·근거 저장"):
-                try:
-                    store.save_stock({"code": stock["code"], "business": business, "evidence": evidence})
-                    st.rerun()
-                except Exception:
-                    st.error("저장 실패. 입력 내용을 확인한 뒤 다시 시도하세요.")
-        if report:
-            for item in report.get("disclosures", []):
-                st.link_button(f"{item['date']} · {item['title']}", item["url"])
+with business:
+    if report:
+        result = brief(report)
+        st.subheader("기업 핵심 분석")
+        st.write(result["summary"])
+        company = report.get("company", {})
+        if company:
+            st.caption("DART 기업명: "+str(company.get("corp_name",""))+" · 업종코드: "+str(company.get("induty_code","")))
+        ai = stock.get("ai_brief")
+        if ai and ai.get("status") == "ok":
+            st.markdown(ai["text"])
+            st.caption("AI 해설 · "+ai["model"]+" · 공시 발췌 기반, 원문 대조 필요")
+        elif ai and ai.get("status") == "failed":
+            st.info("AI 해설 조회는 실패했습니다. 공식 숫자와 원문은 아래에서 확인할 수 있습니다.")
+        else:
+            st.caption("현재는 공식 숫자의 규칙 기반 해설입니다. AI 문장 해설은 운영자가 OPENAI_API_KEY와 OPENAI_MODEL을 연결하면 분석할 때 함께 생성됩니다.")
+        st.subheader("사업 원문과 섹터 점검")
+        excerpt = report.get("business_excerpt","")
+        if excerpt:
+            st.write(excerpt[:1800]+"…")
+            with st.expander("사업보고서 발췌 더 보기"):
+                st.text(excerpt)
+        else:
+            st.info("사업 원문 발췌가 없습니다. 공시 원문을 확인하세요.")
+        sectors = result["sectors"]
+        if sectors:
+            st.caption("공시 발췌의 키워드로 찾은 사업 관련 후보입니다. 공식 업종 분류·주력 사업 확정·최신 섹터 동향 분석은 아닙니다.")
+            for sector in sectors:
+                with st.container(border=True):
+                    st.markdown("**"+sector["sector"]+"**")
+                    st.write(sector["logic"])
+                    st.write("확인할 지표: "+" · ".join(sector["signals"]))
+                    st.caption("원문 발견 단어: "+", ".join(sector["keywords"]))
+        else:
+            st.write("이 기업의 섹터 분류는 보류합니다. 수요 변화 → 판매량·가격 → 매출 → 영업이익 순서로 공시를 확인하세요.")
+        for item in report.get("disclosures",[])[:10]:
+            st.link_button(item["date"]+" · "+item["title"],item["url"])
 
 with journal:
     if not is_demo:
         with st.form("note"):
-            note = st.text_area("오늘의 판단 · 보유 이유와 재검토 조건")
-            if st.form_submit_button("일지 기록") and note.strip():
+            kind = st.selectbox("내 종목 구분",["관심","보유"],index=1 if stock.get("kind")=="보유" else 0)
+            note = st.text_area("나의 판단 · 다음에 확인할 조건")
+            if st.form_submit_button("기록 저장"):
                 try:
-                    store.log("journal", {"code": stock["code"], "at": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(), "kind": "note", "note": note})
+                    store.save_stock({"code":stock["code"],"kind":kind})
+                    store.log("journal",{"code":stock["code"],"at":datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),"kind":"note","note":note})
+                    st.session_state.pop("latest_analysis",None)
                     st.rerun()
                 except Exception:
-                    st.error("기록 실패. 내용을 복사해 보관하고 다시 시도하세요.")
-        for item in reversed(state["journal"]):
-            if item["code"] == stock["code"]:
-                with st.expander(item["at"] + " · " + item["kind"]):
+                    st.error("기록 저장 실패. 입력 내용을 복사해 보관하세요.")
+        st.download_button("현재 분석 JSON 다운로드",json.dumps(stock,ensure_ascii=False,indent=2),file_name=stock["code"]+"-analysis.json",mime="application/json")
+        history = [item for item in state["journal"] if item["code"]==stock["code"]]
+        for item in reversed(history):
+            with st.expander(item["at"]+" · "+item["kind"]):
+                if item.get("note"):
+                    st.write(item["note"])
+                elif item.get("automatic_brief"):
+                    st.write(item["automatic_brief"]["summary"])
+                    st.caption("시세 기준일: "+item.get("report",{}).get("price_date",""))
+                with st.expander("저장 원본"):
                     st.json(item)
     else:
-        st.info("개인 종목을 저장하면 분석 이력과 나의 판단을 기록할 수 있습니다.")
-
-with automation:
-    st.write("매주 월요일 오전 8시 17분 예약 점검 → 같은 날 오후 8시 달력 점검 일정")
-    st.caption("GitHub Actions 설정은 README를 따릅니다. 예약 실행은 지연될 수 있습니다.")
-    if not is_demo:
-        st.write("마지막 성공:", stock.get("last_success", "아직 없음"))
-        with st.form("review"):
-            enabled = st.checkbox("이 종목을 주간 점검에 포함", stock.get("review_enabled", False))
-            if st.form_submit_button("점검 설정 저장"):
-                try:
-                    store.save_stock({"code": stock["code"], "review_enabled": enabled})
-                    st.rerun()
-                except Exception:
-                    st.error("설정 저장 실패")
-    st.info("캘린더 쓰기는 기본 비활성입니다. 수동 미리보기 후 Actions에서 기록 모드를 직접 선택하세요.")
-    if state["runs"]:
-        st.dataframe(state["runs"][-20:], hide_index=True)
+        st.info("종목을 분석하면 결과가 자동 저장됩니다. 나의 판단만 한 문장 덧붙이세요.")
