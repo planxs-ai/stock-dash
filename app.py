@@ -15,6 +15,7 @@ from automatic import brief
 from data_registry import PROVIDERS, capabilities as active_capabilities, health_all
 from providers import DataError, Official, demo
 from storage import Store
+from portfolio_ui import render_portfolio
 from ui_v2 import apply_theme, brand, card, empty_state, hero, source_badge
 
 
@@ -35,6 +36,7 @@ try:
         "DART_CRTFC_KEY",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
+        "KIS_ENV", "KIS_APP_KEY", "KIS_APP_SECRET", "KIS_CANO", "KIS_ACNT_PRDT_CD",
     ]:
         if key in st.secrets:
             os.environ[key] = str(st.secrets[key])
@@ -735,14 +737,7 @@ elif nav == "테마 & 섹터":
         ],
     )
 elif nav == "포트폴리오":
-    render_placeholder(
-        "포트폴리오",
-        "보유종목의 비중·손익기여·섹터 집중도와 이벤트를 관리합니다.",
-        [
-            ("보유 시세", "portfolio.quote", "보유종목 현재가/기준가"),
-            ("위험 집중도", "portfolio.risk", "종목·섹터 집중과 변동성"),
-        ],
-    )
+    render_portfolio(store, sample_mode)
 elif nav == "관심 종목":
     render_watchlist()
 elif nav == "AI 인사이트":
