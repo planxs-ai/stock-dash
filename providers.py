@@ -5,6 +5,7 @@ import html
 import zipfile
 from datetime import date, timedelta
 from xml.etree import ElementTree
+from urllib.parse import unquote, urlsplit
 
 import requests
 
@@ -13,13 +14,70 @@ class DataError(RuntimeError):
     pass
 
 
+DART_ERRORS = {
+    "010": "등록되지 않은 DART 키입니다. DART_CRTFC_KEY 값을 확인하세요.",
+    "011": "DART 키가 사용 중지 상태입니다. 인증키 관리에서 상태를 확인하세요.",
+    "012": "DART가 접속 IP를 허용하지 않았습니다. 인증키의 IP 제한과 앱 서버 IP를 확인하세요.",
+    "020": "DART 호출 한도를 초과했습니다. 추가 조회를 멈추고 한도를 확인하세요.",
+    "100": "DART 요청 항목이 올바르지 않습니다.",
+    "800": "DART 시스템 점검 중입니다. 잠시 후 다시 시도하세요.",
+    "901": "DART 계정의 개인정보 보유기간이 만료됐습니다. DART에서 계정을 확인하세요.",
+}
+
+
+def dart_error(code):
+    return DART_ERRORS.get(str(code), "DART가 정상 데이터를 반환하지 않았습니다. 승인 상태와 조회 조건을 확인하세요.")
+
+
 def get(url, params):
-    try:
-        r = requests.get(url, params=params, timeout=30)
-        r.raise_for_status()
-        return r
-    except requests.RequestException:
-        raise DataError("공식 API 통신 실패. 키·활용승인·호출 한도를 확인하세요.") from None
+    path = urlsplit(url).path
+    labels = {"corpCode.xml": "DART 기업명·종목코드 목록", "document.xml": "DART 사업보고서 원문",
+              "company.json": "DART 기업개황", "fnlttSinglAcntAll.json": "DART 결산 실적", "list.json": "DART 공시 목록"}
+    label = labels.get(path.rsplit("/",1)[-1], "공공데이터포털 주식시세")
+    for attempt in range(2):
+        try:
+            r = requests.get(url, params=params, timeout=(10,60) if path.endswith(("corpCode.xml","document.xml")) else (10,30))
+            if r.status_code in (502,503,504) and attempt == 0:
+                continue
+            status = r.status_code
+            if status >= 400:
+                if status in (401,403):
+                    hint = "접근이 거절됐습니다. 해당 서비스의 키·활용승인·IP 제한을 확인하세요."
+                elif status == 429:
+                    hint = "요청 제한에 걸렸습니다. 잠시 조회를 멈춘 뒤 다시 시도하세요."
+                elif status >= 500:
+                    hint = "제공 서버 오류입니다. 키를 바꾸지 말고 잠시 후 다시 시도하세요."
+                else:
+                    hint = "요청을 처리하지 못했습니다. 해당 API의 주소와 설정을 확인하세요."
+                raise DataError(f"{label} · HTTP {status}: {hint}")
+            # Error responses can be XML even when JSON or a ZIP was requested.
+            if r.content.lstrip().startswith(b"<") and len(r.content) < 10000:
+                try:
+                    root = ElementTree.fromstring(r.content)
+                    code = root.findtext(".//status")
+                    if code and code != "000":
+                        raise DataError(label+": "+dart_error(code))
+                    reason = root.findtext(".//returnReasonCode")
+                    if reason:
+                        hints = {"30":"등록되지 않은 시세 키입니다. 일반 인증키와 활용신청을 확인하세요.",
+                                 "31":"시세 키 사용기간을 확인하세요.","32":"허용되지 않은 IP입니다.",
+                                 "22":"시세 조회 한도를 초과했습니다.","20":"요청한 서비스 접근이 거절됐습니다."}
+                        raise DataError(label+": "+hints.get(reason,"서비스가 오류를 반환했습니다. 시세 활용승인과 인증키를 확인하세요."))
+                except ElementTree.ParseError:
+                    pass
+            return r
+        except requests.Timeout:
+            if attempt == 0:
+                continue
+            raise DataError(label+": 응답 시간이 초과됐습니다. 한 차례 재시도했으며, 키 오류로 확정할 수 없습니다.") from None
+        except requests.exceptions.SSLError:
+            raise DataError(label+": 보안 연결(TLS)에 실패했습니다. 서버 연결 환경을 확인하세요.") from None
+        except requests.ConnectionError:
+            if attempt == 0:
+                continue
+            raise DataError(label+": 서버에 연결하지 못했습니다. 네트워크·DNS·제공 서버 상태를 확인하세요.") from None
+        except requests.RequestException:
+            raise DataError(label+": 요청 전송에 실패했습니다. 서버 연결 환경을 확인하세요.") from None
 
 
 def number(value):
@@ -31,8 +89,8 @@ def number(value):
 
 class Official:
     def __init__(self):
-        self.dart_key = os.getenv("DART_CRTFC_KEY", "")
-        self.price_key = os.getenv("DATA_GO_KR_SERVICE_KEY", "")
+        self.dart_key = os.getenv("DART_CRTFC_KEY", "").strip()
+        self.price_key = unquote(os.getenv("DATA_GO_KR_SERVICE_KEY", "").strip())
         if not self.dart_key or not self.price_key:
             raise DataError("시세·DART 키가 모두 필요합니다.")
         self.corps = None
@@ -49,7 +107,7 @@ class Official:
         if payload.get("status") == "013":
             return None
         if payload.get("status") != "000":
-            raise DataError("DART 조회 실패. 승인·연도·한도를 확인하세요.")
+            raise DataError(dart_error(payload.get("status")))
         return payload
 
     def corp(self, code):
