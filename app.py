@@ -1,4 +1,5 @@
 import hmac
+import hashlib
 import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -57,6 +58,9 @@ class SessionStore:
     def log(self, collection, item):
         self.read()[collection].append(item)
 
+    def change(self, operation):
+        operation(self.read())
+
 
 sample_mode = not password
 try:
@@ -93,6 +97,14 @@ def run_analysis(code):
     try:
         with st.spinner("공식 시세 · 최근 결산 · 과거 평가 · 사업 공시를 확인합니다…"):
             provider = st.session_state.get("directory_provider") or Official()
+            if code.startswith("pending-"):
+                pending = next((s for s in state["stocks"] if s["code"] == code), {})
+                matches = provider.search(pending.get("name", ""))
+                if len(matches) != 1:
+                    st.session_state.search_candidates = matches
+                    st.info("이름을 정확히 확인하려면 검색 목록에서 종목을 선택하세요.")
+                    return
+                code = matches[0]["code"]
             report = provider.automatic(code)
             result = brief(report)
             ai = explain(report, result)
@@ -107,6 +119,13 @@ def run_analysis(code):
                 store.save_stock(stock)
                 store.log("journal", {"code": code, "at": at, "kind": "automatic",
                                       "report": report, "automatic_brief": result, "ai_brief": ai})
+                def consolidate(data):
+                    pending_ids = {s["code"] for s in data["stocks"] if s["code"].startswith("pending-") and s["name"].casefold()==report["name"].casefold()}
+                    for item in data["journal"]:
+                        if item["code"] in pending_ids:
+                            item["code"] = code
+                    data["stocks"] = [s for s in data["stocks"] if s["code"] not in pending_ids]
+                store.change(consolidate)
                 st.session_state.save_notice = "분석 결과와 이력을 저장했습니다."
             except Exception:
                 st.session_state.save_notice = "분석은 끝났지만 저장하지 못했습니다. 아래 JSON 다운로드로 결과를 보관하세요."
@@ -150,11 +169,29 @@ if latest:
     choices[latest["code"]] = latest
 with st.sidebar:
     st.header("내 분석 기록")
+    if not sample_mode:
+        with st.form("save_watch_only"):
+            watch_name = st.text_input("관심종목 이름", placeholder="분석 연결이 안 돼도 저장할 수 있습니다")
+            watch_code = st.text_input("종목코드 · 알면 입력, 생략 가능", max_chars=6)
+            if st.form_submit_button("관심종목 추가"):
+                name, code = watch_name.strip(), watch_code.strip()
+                if not name or (code and (len(code)!=6 or not code.isascii() or not code.isdigit())):
+                    st.error("이름을 입력하고, 코드는 생략하거나 숫자 6자리로 입력하세요.")
+                else:
+                    existing = next((s for s in state["stocks"] if s["name"].casefold()==name.casefold()), {})
+                    identity = existing.get("code") or code or "pending-"+hashlib.sha256(name.casefold().encode()).hexdigest()[:16]
+                    try:
+                        store.save_stock({"code":identity,"name":name,"kind":existing.get("kind","관심")})
+                        st.session_state.selected_code=identity
+                        st.session_state.pop("stock_picker",None)
+                        st.rerun()
+                    except Exception:
+                        st.error("관심종목을 저장하지 못했습니다. 저장소 연결을 확인하세요.")
     if choices:
         codes = list(choices)
         preferred = st.session_state.get("selected_code")
         selected = st.selectbox("종목 선택", codes, index=codes.index(preferred) if preferred in codes else 0,
-                                format_func=lambda c: choices[c]["name"]+" · "+c, key="stock_picker")
+                                format_func=lambda c: choices[c]["name"]+" · "+("코드 확인 대기" if c.startswith("pending-") else c), key="stock_picker")
         stock = choices[selected]
     else:
         stock = {"code": "SAMPLE", "name": "가상 반도체", "report": demo()}
@@ -164,7 +201,7 @@ with st.sidebar:
 
 report = stock.get("report")
 is_demo = stock["code"] == "SAMPLE"
-st.subheader(stock["name"] + (" · 가상 예시" if is_demo else " · "+stock["code"]))
+st.subheader(stock["name"] + (" · 가상 예시" if is_demo else " · "+("코드 확인 대기" if stock["code"].startswith("pending-") else stock["code"])))
 if not is_demo:
     if st.button("최신 데이터로 다시 분석"):
         run_analysis(stock["code"])
