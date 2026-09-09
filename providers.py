@@ -91,8 +91,6 @@ class Official:
     def __init__(self):
         self.dart_key = os.getenv("DART_CRTFC_KEY", "").strip()
         self.price_key = unquote(os.getenv("DATA_GO_KR_SERVICE_KEY", "").strip())
-        if not self.dart_key or not self.price_key:
-            raise DataError("시세·DART 키가 모두 필요합니다.")
         self.corps = None
         self.names = {}
         self.price_rows = {}
@@ -243,6 +241,32 @@ class Official:
             return ""
 
     def automatic(self, code):
+        try:
+            return self._automatic_direct(code)
+        except DataError as original:
+            try:
+                return self.cached_report(code)
+            except (DataError,requests.RequestException,ValueError,KeyError,TypeError):
+                raise original from None
+
+    def cached_report(self, code):
+        if not re.fullmatch(r"[0-9]{6}", code):
+            raise DataError("종목코드를 확인하세요.")
+        response = requests.get("https://raw.githubusercontent.com/planxs-ai/stock-dash/main/public-data/"+code+".json",timeout=(5,15))
+        response.raise_for_status()
+        source=response.json()
+        if source.get("code")!=code or not source.get("years") or len(source["years"])!=3:
+            raise DataError("수집 자료의 종목·기간을 확인하세요.")
+        today=date.today()
+        price, day, name=self.price(code,today)
+        row=self.price_rows.get((code,today.isoformat()),{})
+        return {**source,"name":name,"price":price,"price_date":day,"sample":False,
+                "market_cap":number(row.get("mrktTotAmt")),"shares":number(row.get("lstgStCnt")),
+                "anchors":[],"data_route":"GitHub 공식 공시 수집본",
+                "warnings":["재무·사업·공시는 표시된 수집일 기준입니다. 현재 시세와 날짜가 다를 수 있습니다.",
+                            "과거 시가총액 배수 미수집: 적정주가 참고 범위는 보류합니다."]}
+
+    def _automatic_direct(self, code):
         # Fail early on a host that cannot reach DART, before a large ZIP fetch.
         try:
             probe = requests.get("https://opendart.fss.or.kr/api/company.json",
