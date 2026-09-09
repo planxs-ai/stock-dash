@@ -1,0 +1,30 @@
+name: DART connection diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/dart-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check DART without exposing credentials
+        env:
+          DART_CRTFC_KEY: ${{ secrets.DART_CRTFC_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          from check_dart import check
+          key = os.environ.get("DART_CRTFC_KEY", "").strip()
+          print("Mode:", "configured repository secret" if key else "connectivity only; no key configured")
+          print(check(key))
+          if not key:
+              print("With no key configured, an authentication error is expected and proves only that DART responded.")
+          PY
