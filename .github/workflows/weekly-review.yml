@@ -1,0 +1,37 @@
+name: Weekly investment review
+on:
+  workflow_dispatch:
+    inputs:
+      write_calendar:
+        description: '확인한 투자 달력에 실제 기록 (기본: 미리보기)'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 23 * * 0'
+permissions:
+  contents: read
+concurrency:
+  group: weekly-investment-review
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_SCHEDULE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Review and calendar sync
+        run: python weekly_review.py
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && !inputs.write_calendar && 'true' || github.event_name == 'schedule' && vars.CALENDAR_WRITE != 'true' && 'true' || 'false' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+          DART_CRTFC_KEY: ${{ secrets.DART_CRTFC_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
