@@ -125,6 +125,8 @@ class Official:
         return self.corps[code]
 
     def search(self, query):
+        if self.corps is None:
+            return self.search_prices(query)
         # Load the same official directory used to resolve financial statements.
         if self.corps is None:
             try:
@@ -139,6 +141,35 @@ class Official:
                    if q in re.sub(r"\s+", "", n).casefold() or q == c]
         exact = [r for r in matches if q in (r["code"], re.sub(r"\s+", "", r["name"]).casefold())]
         return exact or matches[:30]
+
+    def search_prices(self, query):
+        """Search the smaller price response without downloading DART's directory."""
+        q = query.strip()
+        if not q:
+            return []
+        numeric = len(q) == 6 and q.isascii() and q.isdigit()
+        params = {"serviceKey": self.price_key, "resultType": "json", "numOfRows": 100,
+                  "likeSrtnCd" if numeric else "likeItmsNm": q}
+        for days in range(10):
+            target = (date.today()-timedelta(days=days)).strftime("%Y%m%d")
+            try:
+                response = get("https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo", {**params,"basDt":target}).json()["response"]
+                if str(response["header"].get("resultCode")) not in ("00","0"):
+                    raise DataError("공공데이터포털 종목 검색: 시세 서비스 승인과 인증키를 확인하세요.")
+                items = (response.get("body",{}).get("items") or {}).get("item",[])
+                if isinstance(items,dict):
+                    items=[items]
+                matches={}
+                for row in items:
+                    code=str(row.get("srtnCd","")).removeprefix("A")
+                    if len(code)==6 and code.isdigit():
+                        matches[code]={"code":code,"name":row["itmsNm"]}
+                if matches:
+                    exact=[r for r in matches.values() if r["name"].casefold()==q.casefold() or r["code"]==q]
+                    return exact or list(matches.values())[:30]
+            except (ValueError,KeyError,TypeError):
+                raise DataError("공공데이터포털 종목 검색 응답을 읽지 못했습니다.") from None
+        return []
 
     def price(self, code, asof):
         for days in range(10):
