@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from ai_brief import explain
+from research_ui import render_research
 from automatic import brief
 from data_registry import PROVIDERS, capabilities as active_capabilities, health_all
 from providers import DataError, Official, demo
@@ -169,7 +169,7 @@ def run_analysis(code):
                 st.rerun()
 
             result = brief(report)
-            ai = explain(report, result)
+            ai = None  # Narrative research is supplied through chat, without an LLM API.
             at = datetime.now(ZoneInfo("Asia/Seoul")).isoformat()
             existing = next((s for s in state["stocks"] if s["code"] == code), {})
             stock = {
@@ -236,6 +236,7 @@ if st.session_state.get("force_nav"):
     st.session_state.nav_choice = st.session_state.pop("force_nav")
 
 NAV_ITEMS = [
+    "통합 분석",
     "홈",
     "시장 현황",
     "종목 분석",
@@ -718,8 +719,8 @@ def render_placeholder(title, subtitle, required):
                 st.caption(cap)
 
 
-if nav == "홈":
-    render_home()
+if nav in ("홈", "통합 분석"):
+    render_research(store, state, sample_mode)
 elif nav == "시장 현황":
     render_market()
 elif nav == "종목 분석":
@@ -741,6 +742,6 @@ elif nav == "포트폴리오":
 elif nav == "관심 종목":
     render_watchlist()
 elif nav == "AI 인사이트":
-    render_ai()
+    render_research(store, state, sample_mode)
 elif nav == "데이터 연결 관리":
     render_sources()
