@@ -103,7 +103,7 @@ if password and not st.session_state.get("authorized"):
         with st.container(border=True):
             st.subheader("개인 대시보드 열기")
             with st.form("login"):
-                entered = st.text_input("비밀번호", type="password", placeholder="APP_PASSWORD")
+                entered = st.text_input("비밀번호", type="password", placeholder="설정한 비밀번호를 입력하세요")
                 if st.form_submit_button("대시보드 열기", type="primary", use_container_width=True):
                     if hmac.compare_digest(entered.encode(), password.encode()):
                         st.session_state.authorized = True
@@ -235,24 +235,19 @@ if latest:
 if st.session_state.get("force_nav"):
     st.session_state.nav_choice = st.session_state.pop("force_nav")
 
-NAV_ITEMS = [
-    "통합 분석",
-    "홈",
-    "시장 현황",
-    "종목 분석",
-    "공시 분석",
-    "테마 & 섹터",
-    "포트폴리오",
-    "관심 종목",
-    "AI 인사이트",
-    "데이터 연결 관리",
-]
+NAV_ITEMS = ["내 종목", "계좌 연결", "설정"]
+legacy = {"통합 분석":"내 종목", "홈":"내 종목", "AI 인사이트":"내 종목", "관심 종목":"내 종목", "포트폴리오":"계좌 연결"}
+current = st.session_state.get("nav_choice", "내 종목")
+if current not in NAV_ITEMS:
+    st.session_state.nav_choice = legacy.get(current, "설정")
+    if current not in legacy:
+        st.session_state.advanced_page = current
 
 with st.sidebar:
     brand()
     nav = st.radio("메뉴", NAV_ITEMS, key="nav_choice")
     st.markdown("---")
-    if choices:
+    if choices and nav == "설정":
         codes = list(choices)
         preferred = st.session_state.get("selected_code")
         selected = st.selectbox(
@@ -263,6 +258,8 @@ with st.sidebar:
             key="stock_picker",
         )
         stock = choices[selected]
+    elif choices:
+        stock = choices.get(st.session_state.get("selected_code"), next(iter(choices.values())))
     else:
         stock = {"code": "SAMPLE", "name": "가상 반도체", "report": demo()}
 
@@ -719,29 +716,23 @@ def render_placeholder(title, subtitle, required):
                 st.caption(cap)
 
 
-if nav in ("홈", "통합 분석"):
+if nav == "내 종목":
     render_research(store, state, sample_mode)
-elif nav == "시장 현황":
-    render_market()
-elif nav == "종목 분석":
-    render_stock()
-elif nav == "공시 분석":
-    render_disclosures()
-elif nav == "테마 & 섹터":
-    render_placeholder(
-        "테마 & 섹터",
-        "시장 주도 산업을 업종 강도·수급·수출·실적으로 교차 확인합니다.",
-        [
-            ("업종 강도", "sector.performance", "업종별 등락과 거래대금"),
-            ("업종 수급", "sector.flow", "외국인·기관의 업종별 자금 흐름"),
-            ("산업 수출", "industry.export", "품목·국가별 수출 변화"),
-        ],
-    )
-elif nav == "포트폴리오":
+elif nav == "계좌 연결":
     render_portfolio(store, sample_mode)
-elif nav == "관심 종목":
-    render_watchlist()
-elif nav == "AI 인사이트":
-    render_research(store, state, sample_mode)
-elif nav == "데이터 연결 관리":
-    render_sources()
+else:
+    st.header("설정과 추가 도구")
+    st.caption("계좌 연결 없이도 내 종목을 추가하고 조사 결과를 확인할 수 있습니다.")
+    options = ["사용 안내", "데이터 연결 관리", "종목 분석", "공시 분석", "시장 현황", "테마 & 섹터"]
+    previous = st.session_state.get("advanced_page", "사용 안내")
+    if previous not in options: st.session_state.advanced_page = "사용 안내"
+    page = st.selectbox("필요한 도구", options, key="advanced_page")
+    if page == "사용 안내":
+        st.markdown("**1. 내 종목**에서 기업 이름을 추가하세요.\n\n**2. 조사 요청**을 열어 요청문을 이 채팅에 보내세요.\n\n**3. 종목을 선택**해 핵심 요약과 자세한 근거를 확인하세요.")
+        st.link_button("상세 사용 안내", "https://github.com/planxs-ai/stock-dash/blob/main/CHAT-RESEARCH.md")
+    elif page == "데이터 연결 관리": render_sources()
+    elif page == "종목 분석": render_stock()
+    elif page == "공시 분석": render_disclosures()
+    elif page == "시장 현황": render_market()
+    else:
+        render_placeholder("테마 & 섹터", "산업별 흐름을 확인합니다.", [("업종 강도", "sector.performance", "업종별 등락과 거래대금"), ("업종 수급", "sector.flow", "외국인·기관 자금 흐름"), ("산업 수출", "industry.export", "품목별 수출 변화")])
