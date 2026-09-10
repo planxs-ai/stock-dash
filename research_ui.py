@@ -7,11 +7,13 @@ import streamlit as st
 
 from ui_v2 import hero, card
 from automatic import brief
+from bi_view import theme, overview, detail, peers_chart
 from chat_research import published, parse_bundle, trends, growth, request_text
 
 
 def render_research(store, state, sample_mode):
-    hero('내 종목', '관심 있는 기업을 담고, 판단에 필요한 변화만 확인하세요.', 'PLANX · STOCK RESEARCH')
+    theme()
+    hero('내 투자의 현재를 한눈에', '관심 있는 기업을 담고, 판단에 필요한 변화만 확인하세요.', 'PLANX · STOCK RESEARCH')
     if sample_mode:
         st.info('둘러보기 중입니다. 개인 목록을 저장하려면 먼저 대시보드 비밀번호를 설정하세요.')
     else:
@@ -79,16 +81,10 @@ def render_research(store, state, sample_mode):
                '적정주가 참고':f"{v['base']:,.0f}원" if v else '조사 필요',
                '일봉':trend['daily'], '주봉':trend['weekly'], '조사일':r.get('as_of','미조사')}
         rows.append(row);details[key]=(stock, r, trend, frame)
-    ready = sum(bool(x[1]) for x in details.values())
-    a,b,c = st.columns(3)
-    with a: card('내 목록', str(len(rows)) + '종목', '관심·보유종목')
-    with b: card('조사 자료 보유', str(ready) + '종목', '최신 여부는 자료 기준일로 확인')
-    with c: card('처음 조사할 종목', str(len(rows)-ready) + '종목', '조사 요청에서 한 번에 전달')
-    st.markdown('')
-    st.subheader('종목 한눈에 보기')
-    st.dataframe(pd.DataFrame(rows)[['종목','누적 영업이익 성장','일봉','조사일']], hide_index=True, use_container_width=True)
+    overview(details, st.session_state.get('account_snapshot'))
     with st.expander('전체 지표 비교'):
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.markdown('### 기업 하나를 깊게 보기')
     selected = st.selectbox('자세히 볼 종목', list(details), format_func=lambda k:stocks[k]['name'], key='research_selected')
     stock, r, trend, frame = details[selected]
     if not r:
@@ -98,6 +94,7 @@ def render_research(store, state, sample_mode):
         return
     st.subheader(stock['name'])
     st.caption('조사일 ' + r['as_of'] + ' · 각 표의 자료 기간은 아래에 별도 표시합니다. 실시간 분석이 아닙니다.')
+    detail(r)
     summary = r.get('summary')
     if summary:
         with st.container(border=True):
@@ -124,6 +121,7 @@ def render_research(store, state, sample_mode):
         if peers and peers['rows']:
             st.write(peers['selection_reason'])
             st.caption(f"비교 표본 내 순위 · {peers['period']} · {peers['basis']} · {peers['currency']} {peers['unit']}")
+            peers_chart(peers)
             df = pd.DataFrame(peers['rows']);df['순위'] = df['operating_profit'].rank(method='min', ascending=False).astype(int)
             st.dataframe(df.sort_values('순위')[['순위','name','operating_profit','source']].rename(columns={'name':'기업','operating_profit':'영업이익','source':'출처'}), hide_index=True)
         else: st.info('같은 기간·회계기준의 경쟁사 실적 조사 필요')
