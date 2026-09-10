@@ -203,26 +203,26 @@ hr { border-color:#E6EAF0 !important; }
 }
 /* Quiet, readable research workspace. */
 .block-container { max-width:1240px; padding-top:2rem; }
-.stApp { background:#f5f7fa; }
-section[data-testid="stSidebar"] { background:#101e32; border-right:0; }
+.stApp { background:#f8f6f1; }
+section[data-testid="stSidebar"] { background:#eee7da; border-right:0; }
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color:#d4deed; }
-section[data-testid="stSidebar"] .planx-brand-title { color:#fff; font-size:22px; }
-section[data-testid="stSidebar"] .planx-brand-sub { color:#b3c5dd; font-size:13px; }
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color:#493e2f; }
+section[data-testid="stSidebar"] .planx-brand-title { color:#493e2f; font-size:22px; }
+section[data-testid="stSidebar"] .planx-brand-sub { color:#806e50; font-size:13px; }
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] { gap:10px; }
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label { padding:14px 12px; border-radius:8px; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background:#1c304d; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background:#254267; box-shadow:inset 3px 0 #76a9ff; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color:#fff; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background:#e7ddc9; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background:#dfcea8; box-shadow:inset 3px 0 #ad873f; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color:#493e2f; }
 [data-testid="stSidebar"] .stButton button p { color:#1b2c45; }
 .planx-brand { margin:12px 0 36px; }
-.planx-brand-mark { background:#3568ce; border-radius:9px; width:38px; height:38px; }
+.planx-brand-mark { background:#a17c36; border-radius:9px; width:38px; height:38px; }
 .planx-hero { background:transparent; border:0; border-radius:0; padding:0 0 18px; box-shadow:none; margin-bottom:6px; }
 .planx-hero h1 { font-size:36px; font-weight:750; }
-.planx-hero p { font-size:16px; color:#52637a; max-width:650px; }
-.planx-eyebrow { font-size:12px; color:#526781; letter-spacing:.12em; }
-.planx-card { box-shadow:none; min-height:132px; border-radius:12px; padding:22px; border-top:3px solid #254f8a; }
+.planx-hero p { font-size:16px; color:#77674e; max-width:650px; }
+.planx-eyebrow { font-size:12px; color:#98763a; letter-spacing:.12em; }
+.planx-card { box-shadow:none; min-height:132px; border-radius:12px; padding:22px; border-top:3px solid #b1883c; }
 .planx-card-title { font-size:14px; font-weight:500; }
 .planx-card-value { font-size:28px; font-variant-numeric:tabular-nums; }
 .planx-card-note { font-size:13px; color:#5d6d82; }
