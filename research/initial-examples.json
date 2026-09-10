@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "reports": [
+    {
+      "code": "005930",
+      "name": "삼성전자",
+      "as_of": "2026-09-10",
+      "summary": {
+        "text": "2025년 연간 결산과 2024년 결산을 비교한 초기 조사입니다. 분기별 최신 흐름과 현재 주가 판단은 추가 확인이 필요합니다.",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820"
+      },
+      "business": {
+        "text": "스마트폰·TV·가전 등 완제품과 메모리·시스템 반도체, 디스플레이, 자동차 전장·오디오 사업을 함께 운영합니다. 전사 이익을 읽을 때는 반도체만의 변화와 다른 사업의 변화를 나누어 확인해야 합니다.",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820"
+      },
+      "financial": {
+        "period": "2025-12",
+        "prior_period": "2024-12",
+        "basis": "연결",
+        "currency": "KRW",
+        "unit": "억원",
+        "revenue": 3336059.38,
+        "prior_revenue": 3008709.03,
+        "operating_profit": 436010.51,
+        "prior_operating_profit": 327259.61,
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820"
+      },
+      "peers": {
+        "period": "2025-12",
+        "basis": "연결",
+        "currency": "KRW",
+        "unit": "억원",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820",
+        "selection_reason": "메모리 관련 국내 기업 2개 표본의 전사 영업이익 비교입니다. 삼성전자는 완제품 등 다른 사업을 포함하므로 메모리 사업 경쟁력 순위로 해석하지 않습니다.",
+        "rows": [
+          {
+            "name": "삼성전자",
+            "operating_profit": 436010.51,
+            "period": "2025-12",
+            "basis": "연결",
+            "currency": "KRW",
+            "unit": "억원",
+            "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820"
+          },
+          {
+            "name": "SK하이닉스",
+            "operating_profit": 472063.19,
+            "period": "2025-12",
+            "basis": "연결",
+            "currency": "KRW",
+            "unit": "억원",
+            "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635"
+          }
+        ]
+      },
+      "data_gaps": [
+        "최신 2026년 분기 누적 실적 추가 조사",
+        "현재 수급·수정주가 시계열 미수집",
+        "적정주가 가정과 현 주가 대조 필요",
+        "주력사업별 매출 비중 추가 대조"
+      ]
+    },
+    {
+      "code": "000660",
+      "name": "SK하이닉스",
+      "as_of": "2026-09-10",
+      "summary": {
+        "text": "2025년 연간 결산과 2024년 결산을 비교한 초기 조사입니다. 분기별 최신 흐름과 현재 주가 판단은 추가 확인이 필요합니다.",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635"
+      },
+      "business": {
+        "text": "DRAM과 NAND 등 메모리 반도체를 주요 제품으로 공급합니다. 고대역폭 메모리(HBM)와 서버용 제품 수요를 확인하되, 메모리 가격·출하량·제품 구성의 변화가 실제 이익으로 연결됐는지 대조해야 합니다.",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635"
+      },
+      "financial": {
+        "period": "2025-12",
+        "prior_period": "2024-12",
+        "basis": "연결",
+        "currency": "KRW",
+        "unit": "억원",
+        "revenue": 971466.75,
+        "prior_revenue": 661929.6,
+        "operating_profit": 472063.19,
+        "prior_operating_profit": 234673.19,
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635"
+      },
+      "peers": {
+        "period": "2025-12",
+        "basis": "연결",
+        "currency": "KRW",
+        "unit": "억원",
+        "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635",
+        "selection_reason": "메모리 관련 국내 기업 2개 표본의 전사 영업이익 비교입니다. 삼성전자는 완제품 등 다른 사업을 포함하므로 메모리 사업 경쟁력 순위로 해석하지 않습니다.",
+        "rows": [
+          {
+            "name": "삼성전자",
+            "operating_profit": 436010.51,
+            "period": "2025-12",
+            "basis": "연결",
+            "currency": "KRW",
+            "unit": "억원",
+            "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820"
+          },
+          {
+            "name": "SK하이닉스",
+            "operating_profit": 472063.19,
+            "period": "2025-12",
+            "basis": "연결",
+            "currency": "KRW",
+            "unit": "억원",
+            "source": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635"
+          }
+        ]
+      },
+      "data_gaps": [
+        "최신 2026년 분기 누적 실적 추가 조사",
+        "현재 수급·수정주가 시계열 미수집",
+        "적정주가 가정과 현 주가 대조 필요",
+        "주력사업별 매출 비중 추가 대조"
+      ]
+    }
+  ]
+}
