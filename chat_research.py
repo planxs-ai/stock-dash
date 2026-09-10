@@ -28,6 +28,11 @@ def validate(report):
         elif isinstance(value, list):
             for v in value: inspect(v)
     inspect(report)
+    for key in ('financial', 'flow', 'valuation', 'prices', 'peers'):
+        if report.get(key) is not None and not isinstance(report[key], dict):
+            raise ValueError(key + ' 항목 형식을 확인하세요.')
+    if not isinstance(report.get('data_gaps', []), list) or any(not isinstance(x, str) for x in report.get('data_gaps', [])):
+        raise ValueError('미확인 항목은 설명 목록으로 입력하세요.')
     def number(obj, key):
         if isinstance(obj.get(key), bool) or not isinstance(obj.get(key), (int, float)):
             raise ValueError(key + ' 숫자가 필요합니다.')
@@ -67,6 +72,7 @@ def validate(report):
         if not isinstance(prices.get('rows'), list) or len(prices['rows']) > 2000: raise ValueError('가격 행 수를 확인하세요.')
         dates = set()
         for row in prices['rows']:
+            if not isinstance(row, dict): raise ValueError('가격 행 형식을 확인하세요.')
             d = date.fromisoformat(row['date']); number(row, 'close')
             if d > date.fromisoformat(report['as_of']) or row['close'] <= 0 or row['date'] in dates: raise ValueError('중복 날짜·미래 가격·종가를 확인하세요.')
             dates.add(row['date'])
@@ -75,7 +81,9 @@ def validate(report):
         for k in ('period', 'basis', 'currency', 'unit', 'selection_reason', 'source'):
             if not peers.get(k): raise ValueError('경쟁사 비교 기준과 선정 이유가 필요합니다.')
         seen = set()
+        if not isinstance(peers.get('rows'), list): raise ValueError('경쟁사 목록이 필요합니다.')
         for row in peers['rows']:
+            if not isinstance(row, dict): raise ValueError('경쟁사 행 형식을 확인하세요.')
             number(row, 'operating_profit')
             for k in ('period', 'basis', 'currency', 'unit'):
                 if row.get(k) != peers[k]: raise ValueError('경쟁사별 기간·회계기준·통화·단위를 통일하세요.')
@@ -87,7 +95,7 @@ def validate(report):
 def parse_bundle(raw):
     if len(raw) > 3_000_000: raise ValueError('조사 파일은 3MB 이하로 나눠 주세요.')
     bundle = json.loads(raw)
-    if bundle.get('schema_version') != 1 or not isinstance(bundle.get('reports'), list): raise ValueError('조사 파일 형식을 확인하세요.')
+    if not isinstance(bundle, dict) or bundle.get('schema_version') != 1 or not isinstance(bundle.get('reports'), list): raise ValueError('조사 파일 형식을 확인하세요.')
     reports = [validate(r) for r in bundle['reports']]
     if len({r['code'] for r in reports}) != len(reports): raise ValueError('중복 종목이 있습니다.')
     return reports
