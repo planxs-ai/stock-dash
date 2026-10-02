@@ -37,7 +37,6 @@ try:
         "DART_CRTFC_KEY",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
-        "KIS_ENV", "KIS_APP_KEY", "KIS_APP_SECRET", "KIS_CANO", "KIS_ACNT_PRDT_CD",
     ]:
         if key in st.secrets:
             os.environ[key] = str(st.secrets[key])
@@ -739,3 +738,4 @@ else:
     elif page == "시장 현황": render_market()
     else:
         render_placeholder("테마 & 섹터", "산업별 흐름을 확인합니다.", [("업종 강도", "sector.performance", "업종별 등락과 거래대금"), ("업종 수급", "sector.flow", "외국인·기관 자금 흐름"), ("산업 수출", "industry.export", "품목별 수출 변화")])
+
