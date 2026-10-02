@@ -236,6 +236,14 @@ if st.session_state.get("force_nav"):
     st.session_state.nav_choice = st.session_state.pop("force_nav")
 
 NAV_ITEMS = ["오늘의 투자판단", "계좌 연결", "교육자료", "설정"]
+# Apply explicit entry links once per route change; preserve navigation on reruns.
+entry_page = st.query_params.get("page", "")
+if st.session_state.get("entry_page") != entry_page:
+    st.session_state.entry_page = entry_page
+    if entry_page in ("education", "dashboard"):
+        st.session_state.nav_choice = "교육자료" if entry_page == "education" else "오늘의 투자판단"
+        st.session_state.education_expanded = entry_page == "education"
+
 legacy = {"내 종목":"오늘의 투자판단", "통합 분석":"오늘의 투자판단", "홈":"오늘의 투자판단", "AI 인사이트":"오늘의 투자판단", "관심 종목":"오늘의 투자판단", "포트폴리오":"계좌 연결"}
 current = st.session_state.get("nav_choice", "오늘의 투자판단")
 if current not in NAV_ITEMS:
